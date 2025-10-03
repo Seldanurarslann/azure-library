@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Azure DevOps Variable Group Builder</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI','Roboto','Oxygen','Ubuntu', Cantarell, 'Open Sans','Helvetica Neue', sans-serif;
+      background:#fafafa; color:#262730; line-height:1.6;
+      overflow: hidden; /* sadece sağ taraf scroll */
+    }
+    .container { display:flex; min-height:100vh; height:100vh; }
+
+    /* ==== Sabit (fixed) sidebar; sadece sağ taraf scroll ==== */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 300px;
+      overflow-y: auto;
+      background:#fff;
+      border-right:1px solid #e6eaf1;
+      padding:2rem;
+      box-shadow:0 0 10px rgba(0,0,0,.1);
+    }
+    .main-content {
+      margin-left: 300px;         /* sabit panel kadar boşluk */
+      height: 100vh;
+      overflow-y: auto;           /* sadece sağ taraf kayar */
+      -webkit-overflow-scrolling: touch;
+      padding: 2rem;
+      background:#fafafa;
+      width: calc(100% - 300px);  
+      overflow-x: hidden;       
+    }
+
+    /* Mobil/dar ekran: sabitlemeyi kapatmak isterseniz */
+    @media (max-width: 992px) {
+      body { overflow: auto; }
+      .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        box-shadow: none;
+        width: 100%; 
+      }
+      .main-content {
+        margin-left: 0;
+        height: auto;
+        overflow: visible;
+      }
+    }
+
+    h1 { font-size:2rem; color:#262730; margin-bottom:2rem; font-weight:600; }
+    h2 { font-size:1.5rem; color:#262730; margin-bottom:1rem; font-weight:600; }
+    .sidebar h2 { font-size:1.2rem; margin-bottom:1.5rem; display:flex; align-items:center; }
+    .form-group { margin-bottom:1rem; }
+    label { display:block; margin-bottom:.5rem; font-weight:500; color:#262730; }
+    input[type="text"], input[type="password"], textarea, select {
+      width:100%; padding:.75rem; border:1px solid #e6eaf1; border-radius:.375rem; font-size:.875rem; transition:border-color .2s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, textarea:focus { outline:none; border-color:#ff4b4b; box-shadow:0 0 0 1px #ff4b4b; }
+    textarea { resize:vertical; min-height:120px; }
+
+    .tabs { display:flex; margin-bottom:1rem; border-bottom:1px solid #e6eaf1; }
+    .tab { padding:.75rem 1.5rem; background:none; border:none; cursor:pointer; font-size:.875rem; border-bottom:2px solid transparent; transition:all .2s; }
+    .tab.active { border-bottom-color:#ff4b4b; color:#ff4b4b; font-weight:500; }
+    .tab-content { display:none; padding:1rem 0; }
+    .tab-content.active { display:block; }
+
+    .btn { padding:.75rem 1.5rem; border:none; border-radius:.375rem; font-size:.875rem; font-weight:500; cursor:pointer; transition:all .2s; text-decoration:none; display:inline-block; }
+    .btn-primary { background:#ff4b4b; color:#fff; }
+    .btn-primary:hover { background:#ff2c2c; }
+    .btn-secondary { background:#6c757d; color:#fff; }
+    .btn-secondary:hover { background:#5a6268; }
+    .btn-block { width:100%; }
+    .delete-btn { background:#dc3545; color:#fff; padding:.25rem .5rem; font-size:.75rem; }
+    .delete-btn:hover { background:#c82333; }
+
+    .data-table-container { width:100%; max-height:400px; overflow-y:auto; background:#fff; border-radius:.375rem; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:1rem; }
+    .data-table { width:100%; border-collapse:collapse; }
+    .data-table th, .data-table td { padding:.75rem; text-align:left; border-bottom:1px solid #e6eaf1; }
+    .data-table th { background:#f8f9fa; font-weight:600; color:#262730; position:sticky; top:0; z-index:10; }
+    .data-table tr:hover { background:#f8f9fa; }
+    .data-table input[type="text"] { width:100%; border:1px solid #dee2e6; padding:.5rem; font-size:.875rem; border-radius:.25rem; }
+    .data-table input[type="checkbox"] { width:auto; transform:scale(1.2); }
+
+    .alert { padding:.75rem 1rem; margin-bottom:1rem; border-radius:.375rem; border:1px solid transparent; position:relative; }
+    .alert-success { background:#d4edda; border-color:#c3e6cb; color:#155724; }
+    .alert-error { background:#f8d7da; border-color:#f5c6cb; color:#721c24; }
+    .alert-info { background:#d1ecf1; border-color:#bee5eb; color:#0c5460; }
+    .alert .close-btn { position:absolute; top:8px; right:10px; background:transparent; border:none; cursor:pointer; font-size:18px; line-height:1; color:inherit; }
+
+    .caption { font-size:.8rem; color:#6c757d; margin-top:.5rem; }
+    .divider { border-top:1px solid #e6eaf1; margin:1.5rem 0; }
+    .loading { display:none; text-align:center; padding:1rem; color:#6c757d; }
+    .loading.show { display:block; }
+    .columns { display:flex; gap:1rem; align-items:flex-start; }
+    .col-1 { flex:1; }
+    .col-2 { flex:2; }
+    .table-controls { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+
+    /* --- Streamlit-style controls --- */
+    .st-field { margin-top:1rem; }
+    .st-label { font-weight:600; margin-bottom:.5rem; display:block; }
+    .st-segmented { display:inline-flex; gap:4px; padding:4px; background:#f0f2f6; border-radius:999px; }
+    .st-segmented input { display:none; }
+    .st-segmented label { cursor:pointer; padding:.35rem .9rem; border-radius:999px; font-weight:500; user-select:none; }
+    .st-segmented input:checked + label { background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.08); }
+    .st-dropzone { border:1px dashed #c6c9d2; border-radius:12px; background:#fff; padding:18px; text-align:center; transition:border-color .2s, background .2s; }
+    .st-dropzone.dragover { border-color:#4b8bf4; background:#f7faff; }
+    .st-dz-icon{ font-size:1.6rem; line-height:1; }
+    .st-dz-title{ font-weight:600; margin:.4rem 0 .15rem; }
+    .st-dz-hint{ color:#6b7280; font-size:.9rem; }
+    .st-hidden-input{ display:none; }
+    .st-file-info{ display:flex; align-items:center; justify-content:center; gap:.75rem; margin-top:.75rem; }
+    .st-file-info .name{ font-weight:600; }
+    .st-file-info .size{ color:#6b7280; font-size:.9rem; }
+    .st-file-clear{ border:none; background:transparent; color:#dc3545; text-decoration:underline; cursor:pointer; padding:0; }
+    .st-textarea label{ font-weight:500; display:block; margin-bottom:.5rem; }
+    .st-textarea textarea{
+      width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:.9rem 1rem; min-height:180px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .st-caption{ color:#6b7280; font-size:.9rem; margin-top:.35rem; }
+    .d-none{ display:none !important; }
+
+    /* --- Local (tab içi) alert alanı --- */
+    .local-alert { margin:.75rem 0; }
+    .local-alert:empty { display:none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <h2>🔐 Azure DevOps Bilgileri</h2>
+
+      <div class="form-group">
+        <label for="organization">Organization</label>
+        <input type="text" id="organization" placeholder="myorg" value="{{ form_data.get('organization','') }}">
+      </div>
+
+      <div class="form-group">
+        <label for="project">Project</label>
+        <input type="text" id="project" placeholder="myproject" value="{{ form_data.get('project','') }}">
+      </div>
+
+      <div class="form-group">
+        <label for="pat_token">PAT Token</label>
+        <input type="password" id="pat_token" placeholder="azdo_pat_..." value="">
+      </div>
+
+      <div class="form-group">
+        <label for="variable_group_name">Variable Group Name</label>
+        <input type="text" id="variable_group_name" placeholder="my-variable-group" value="{{ form_data.get('variable_group_name','') }}">
+      </div>
+
+      <div class="form-group">
+        <label for="vg_description">Description</label>
+        <textarea id="vg_description">{{ form_data.get('vg_description',"JSON / web.config'den otomatik oluşturuldu") }}</textarea>
+      </div>
+
+      <div class="divider"></div>
+      <div class="caption">Token hiçbir yere kaydedilmez. Sadece Azure DevOps API çağırılarında kullanılır.</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <h1>Azure DevOps Variable Group Builder</h1>
+
+      <!-- Global Alerts -->
+      <div id="alert-container"></div>
+
+      <h2>Kaynak Bilgilerini Giriniz:</h2>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="showTab(event, 'json')">JSON</button>
+        <button class="tab" onclick="showTab(event, 'xml')">web.config / XML</button>
+      </div>
+
+      <!-- JSON Tab -->
+      <div id="json-tab" class="tab-content active">
+        <div class="st-field">
+          <span class="st-label">JSON girdi yöntemi</span>
+          <div class="st-segmented" role="tablist" aria-label="JSON Input Mode">
+            <input type="radio" id="json-mode-file" name="json-mode" value="file" checked>
+            <label for="json-mode-file">Dosya yükle</label>
+
+            <input type="radio" id="json-mode-paste" name="json-mode" value="paste">
+            <label for="json-mode-paste">Yapıştır</label>
+          </div>
+        </div>
+
+        <!-- JSON'a özel lokal mesaj alanı -->
+        <div id="json-local-alert" class="local-alert"></div>
+
+        <!-- File mode -->
+        <div id="json-file-zone" class="st-dropzone" tabindex="0" aria-label="JSON dosyası yükleme alanı">
+          <input class="st-hidden-input" type="file" id="json-file" accept=".json" />
+          <div class="st-dz-icon">📁</div>
+          <div class="st-dz-title">appsettings.json veya başka JSON dosyası seçin</div>
+          <div class="st-dz-hint">Sürükleyip bırakın veya tıklayın</div>
+          <div id="json-file-info" class="st-file-info d-none">
+            <span class="name"></span>
+            <span class="size"></span>
+            <button type="button" class="st-file-clear" data-clear="json">Temizle</button>
+          </div>
+        </div>
+
+        <!-- Paste mode -->
+        <div id="json-paste-zone" class="st-textarea d-none">
+          <label for="json-text">JSON içeriğini buraya yapıştır</label>
+          <textarea id="json-text" placeholder='{"Logging": {"Level": "Information"}}'></textarea>
+        </div>
+      </div>
+
+      <!-- XML Tab -->
+      <div id="xml-tab" class="tab-content">
+        <div class="st-field">
+          <span class="st-label">XML girdi yöntemi</span>
+          <div class="st-segmented" role="tablist" aria-label="XML Input Mode">
+            <input type="radio" id="xml-mode-file" name="xml-mode" value="file" checked>
+            <label for="xml-mode-file">Dosya yükle</label>
+
+            <input type="radio" id="xml-mode-paste" name="xml-mode" value="paste">
+            <label for="xml-mode-paste">Yapıştır</label>
+          </div>
+        </div>
+
+        <!-- XML'e özel lokal mesaj alanı -->
+        <div id="xml-local-alert" class="local-alert"></div>
+
+        <!-- File mode -->
+        <div id="xml-file-zone" class="st-dropzone" tabindex="0" aria-label="XML dosyası yükleme alanı">
+          <input class="st-hidden-input" type="file" id="xml-file" accept=".config,.xml" />
+          <div class="st-dz-icon">📁</div>
+          <div class="st-dz-title">web.config / .config (XML) dosyası seçin</div>
+          <div class="st-dz-hint">Sürükleyip bırakın veya tıklayın</div>
+          <div id="xml-file-info" class="st-file-info d-none">
+            <span class="name"></span>
+            <span class="size"></span>
+            <button type="button" class="st-file-clear" data-clear="xml">Temizle</button>
+          </div>
+        </div>
+
+        <!-- Paste mode -->
+        <div id="xml-paste-zone" class="st-textarea d-none">
+          <label for="xml-text">web.config / .config XML içeriğini buraya yapıştır</label>
+          <textarea id="xml-text" placeholder="&lt;configuration&gt;...&lt;/configuration&gt;"></textarea>
+          <div class="st-caption">Not: Anahtarlara bölüm öneki eklenmez. Örnek: ApiUrl, LogLevel, MainDb</div>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="loadData()" style="margin: 1rem 0;">Yükle</button>
+
+      <!-- Loading -->
+      <div id="loading" class="loading"><p>Veriler yükleniyor...</p></div>
+
+      <h2>Değişkenleri Görüntüle / Düzenle</h2>
+      <div class="caption">Anahtar, değer ve gizli bayrağını düzenleyebilirsiniz. 'isSecret' True olanlar Azure DevOps'ta secret olarak oluşturulur.</div>
+
+
+      <div class="data-table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:30%;">key</th>
+              <th style="width:50%;">value</th>
+              <th style="width:10%;">isSecret</th>
+              <th style="width:10%;">İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="variables-table"><!-- Başlangıçta daima boş --></tbody>
+        </table>
+      </div>
+
+
+      <div class="table-controls">
+        <button class="btn" onclick="addVariable()">+ Satır Ekle</button>
+      </div>
+      
+      <div class="columns" style="margin-top:2rem;">
+        <div class="col-1">
+          <button class="btn btn-primary btn-block" onclick="createVariableGroup()">🚀 Oluştur</button>
+        </div>
+        <div class="col-2">
+          <div class="caption">Oluşturmadan önce sol taraftan Organization / Project / Token / Group Name alanlarını doldurduğunuzdan emin olun.</div>
+        </div>
+      </div>
+      
+
+      <div class="divider"></div>
+      <div class="caption">İpucu: 'isSecret' True olanlar Azure DevOps'ta <strong>secret</strong> olarak oluşturulur. Secret değerlerini boş bırakıp daha sonra Azure DevOps arayüzünden girmeniz mümkün.</div>
+    </div>
+  </div>
+
+  <script>
+    // --- Tabs ---
+    function showTab(ev, tabName) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(tabName + '-tab').classList.add('active');
+      ev.target.classList.add('active');
+    }
+
+    // --- Global Alerts (kapatılabilir, süre=0 ise kalıcı) ---
+    function showAlert(message, type = 'info', duration = 5000) {
+      const alertContainer = document.getElementById('alert-container');
+      const alertDiv = document.createElement('div');
+      alertDiv.className = `alert alert-${type}`;
+      alertDiv.innerHTML = `
+        <span>${message}</span>
+        <button class="close-btn" aria-label="Kapat" title="Kapat">&times;</button>
+      `;
+      alertContainer.innerHTML = '';
+      alertContainer.appendChild(alertDiv);
+      alertDiv.querySelector('.close-btn').addEventListener('click', () => alertDiv.remove());
+      if (duration && duration > 0) setTimeout(() => { alertDiv.remove(); }, duration);
+    }
+
+    // --- Local (tab içi) alert helper ---
+    function showAlertIn(containerId, message, type = 'info', duration = 5000) {
+      const container = document.getElementById(containerId);
+      if (!container) return showAlert(message, type, duration); // fallback
+      const alertDiv = document.createElement('div');
+      alertDiv.className = `alert alert-${type}`;
+      alertDiv.innerHTML = `
+        <span>${message}</span>
+        <button class="close-btn" aria-label="Kapat" title="Kapat">&times;</button>
+      `;
+      container.innerHTML = '';
+      container.appendChild(alertDiv);
+      alertDiv.querySelector('.close-btn').addEventListener('click', () => alertDiv.remove());
+      if (duration && duration > 0) setTimeout(() => { alertDiv.remove(); }, duration);
+    }
+
+    // --- Streamlit-style helpers ---
+    const humanFileSize = bytes => {
+      const thresh = 1024; if (Math.abs(bytes) < thresh) return bytes + ' B';
+      const units = ['KB','MB','GB','TB']; let u = -1;
+      do { bytes /= thresh; ++u; } while (Math.abs(bytes) >= thresh && u < units.length - 1);
+      return bytes.toFixed(1)+' '+units[u];
+    };
+
+    function toggleZones(group, mode){
+      const fileZone = document.getElementById(`${group}-file-zone`);
+      const pasteZone = document.getElementById(`${group}-paste-zone`);
+      if (!fileZone || !pasteZone) return;
+      const fileActive = mode === 'file';
+      fileZone.classList.toggle('d-none', !fileActive);
+      pasteZone.classList.toggle('d-none', fileActive);
+    }
+
+    function setupSegmented(group){
+      document.querySelectorAll(`input[name="${group}-mode"]`).forEach(r => {
+        r.addEventListener('change', e => toggleZones(group, e.target.value));
+      });
+      const checked = document.querySelector(`input[name="${group}-mode"]:checked`);
+      toggleZones(group, checked ? checked.value : 'file');
+    }
+
+    function setupDropzone(group){
+      const dz = document.getElementById(`${group}-file-zone`);
+      const input = document.getElementById(`${group}-file`);
+      const info = document.getElementById(`${group}-file-info`);
+      const textArea = document.getElementById(`${group}-text`);
+      if (!dz || !input || !info || !textArea) return;
+
+      const showInfo = (file) => {
+        info.querySelector('.name').textContent = file.name;
+        info.querySelector('.size').textContent = `(${humanFileSize(file.size)})`;
+        info.classList.remove('d-none');
+      };
+
+      dz.addEventListener('click', () => input.click());
+
+      ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover');
+      }));
+      ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
+      }));
+
+      dz.addEventListener('drop', e => {
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) { input.files = e.dataTransfer.files; readFile(file); }
+      });
+
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (file) readFile(file);
+      });
+
+      info.querySelector('.st-file-clear').addEventListener('click', (e) => {
+        e.stopPropagation(); input.value = '';
+        info.classList.add('d-none');
+        info.querySelector('.name').textContent = '';
+        info.querySelector('.size').textContent = '';
+        textArea.value = '';
+      });
+
+      function readFile(file){
+        const reader = new FileReader();
+        reader.onload = (ev) => { textArea.value = ev.target.result; };
+        reader.readAsText(file);
+        showInfo(file);
+      }
+    }
+
+    // --- Load data (server) ---
+    async function loadData() {
+      const activeTab = document.querySelector('.tab.active').textContent.trim();
+      const type = (activeTab === 'JSON') ? 'json' : 'xml';
+      const localContainerId = `${type}-local-alert`;
+      const content = document.getElementById(`${type}-text`).value;
+
+      if (!content.trim()) {
+        showAlertIn(localContainerId, 'Lütfen içerik girin veya dosya seçin.', 'error');
+        return;
+      }
+
+      document.getElementById('loading').classList.add('show');
+      try {
+        const response = await fetch('/load_data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, content })
+        });
+        const result = await response.json();
+        if (result.success) {
+          showAlertIn(localContainerId, result.message, 'success');
+          populateVariablesTable(result.variables || []);
+        } else {
+          showAlertIn(localContainerId, result.message, 'error');
+        }
+      } catch (error) {
+        showAlertIn(localContainerId, 'Veri yükleme hatası: ' + error.message, 'error');
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+      }
+    }
+
+    // --- Variables table helpers ---
+    function populateVariablesTable(variables) {
+      const tbody = document.getElementById('variables-table');
+      tbody.innerHTML = '';
+      variables.forEach(variable => addVariableRow(variable));
+    }
+
+    function addVariableRow(variable = {key: '', value: '', isSecret: false}) {
+      const tbody = document.getElementById('variables-table');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><input type="text" class="var-key" value="${(variable.key || '').replace(/"/g,'&quot;')}" onchange="updateVariables()"></td>
+        <td><input type="text" class="var-value" value="${(variable.value || '').replace(/"/g,'&quot;')}" onchange="updateVariables()"></td>
+        <td><input type="checkbox" class="var-secret" ${variable.isSecret ? 'checked' : ''} onchange="updateVariables()"></td>
+        <td><button class="btn delete-btn" onclick="deleteVariable(this)">Sil</button></td>
+      `;
+      tbody.appendChild(row);
+    }
+
+    function addVariable() { addVariableRow(); updateVariables(); }
+    function deleteVariable(button) { button.closest('tr').remove(); updateVariables(); }
+
+    async function updateVariables() {
+      const variables = [];
+      document.querySelectorAll('#variables-table tr').forEach(row => {
+        const key = row.querySelector('.var-key').value.trim();
+        const value = row.querySelector('.var-value').value;
+        const isSecret = row.querySelector('.var-secret').checked;
+        if (key) variables.push({ key, value, isSecret });
+      });
+      try {
+        await fetch('/update_variables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ variables })
+        });
+      } catch (error) {
+        console.error('Değişkenler güncellenemedi:', error);
+      }
+    }
+
+    // --- Create variable group ---
+    async function createVariableGroup() {
+      const formData = {
+        organization: document.getElementById('organization').value.trim(),
+        project: document.getElementById('project').value.trim(),
+        pat_token: document.getElementById('pat_token').value.trim(),
+        variable_group_name: document.getElementById('variable_group_name').value.trim(),
+        vg_description: document.getElementById('vg_description').value.trim()
+      };
+
+      // Get current variables
+      const variables = [];
+      document.querySelectorAll('#variables-table tr').forEach(row => {
+        const key = row.querySelector('.var-key').value.trim();
+        const value = row.querySelector('.var-value').value;
+        const isSecret = row.querySelector('.var-secret').checked;
+        if (key) variables.push({ key, value, isSecret });
+      });
+
+      document.getElementById('loading').classList.add('show');
+      try {
+        const response = await fetch('/create_variable_group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...formData, variables })
+        });
+        const result = await response.json();
+        if (result.success) {
+          // Global, kalıcı ve kapatılabilir başarı mesajı
+          showAlert(result.message, 'success', 0);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
+
+          // Temizlik
+          document.getElementById('variables-table').innerHTML = '';
+          document.getElementById('json-text').value = '';
+          document.getElementById('xml-text').value = '';
+          document.getElementById('json-file').value = '';
+          document.getElementById('xml-file').value = '';
+          document.getElementById('json-file-info').classList.add('d-none');
+          document.getElementById('xml-file-info').classList.add('d-none');
+        } else {
+          showAlert(result.message, 'error');
+          if (result.error_detail) console.error('Detaylı hata:', result.error_detail);
+        }
+      } catch (error) {
+        showAlert('Variable Group oluşturma hatası: ' + error.message, 'error');
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+      }
+    }
+
+    // --- Init ---
+    document.addEventListener('DOMContentLoaded', function() {
+      setupSegmented('json');
+      setupSegmented('xml');
+      setupDropzone('json');
+      setupDropzone('xml');
+      // Başlangıçta tablo boş; yine de backend ile senkron boş set edelim
+      updateVariables();
+    });
+  </script>
+</body>
+</html>
